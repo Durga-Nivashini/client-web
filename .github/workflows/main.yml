@@ -1,0 +1,48 @@
+name: Deploy Spring Boot to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Make Gradle Executable
+        run: chmod +x gradlew
+
+      - name: Build Application
+        run: ./gradlew bootJar
+
+      - name: Copy JAR To EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          source: "build/libs/*.jar"
+          target: "/root/app"
+
+      - name: Restart Application
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          script: |
+            pkill -f jar || true
+
+            JAR=$(find /root/app -name "*.jar" | head -n 1)
+
+            nohup java -jar $JAR > app.log 2>&1 &
